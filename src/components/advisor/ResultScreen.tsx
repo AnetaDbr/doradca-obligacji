@@ -5,7 +5,7 @@ import { Goal, Preference, ScenarioKey, Scenario, BondCalculation, DepositCalcul
 import { SCENARIOS } from "@/lib/bonds/scenarios";
 import { calculateForGoal } from "@/lib/bonds/engine";
 import { getExplanation } from "@/lib/utils/recommendations";
-import { formatPLN, formatYears } from "@/lib/utils/format";
+import { formatPLN, formatPercent, formatYears } from "@/lib/utils/format";
 import ScenarioToggle from "../ui/ScenarioToggle";
 import BondCard from "../ui/BondCard";
 import ComparisonChart from "../ui/Chart";
@@ -73,6 +73,36 @@ export default function ResultScreen({
         <div style={{ width: 80 }} />
       </div>
 
+      {/* Scenario toggle — shared across all goals */}
+      <div className="mb-6 flex flex-wrap items-center gap-3">
+        <span className="text-sm" style={{ color: "var(--text-secondary)" }}>
+          Scenariusz inflacji:
+        </span>
+        <ScenarioToggle value={scenario} onChange={(s) => {
+          onScenarioChange(s);
+          setCustomInflation(null);
+          setCustomDepositRate(null);
+        }} />
+        <button
+          onClick={() => setAdvancedOpen(!advancedOpen)}
+          className="text-sm font-medium cursor-pointer ml-auto"
+          style={{ color: "var(--accent)" }}
+        >
+          {advancedOpen ? "Ukryj ustawienia zaawansowane" : "Pokaż ustawienia zaawansowane"}
+        </button>
+      </div>
+
+      {/* Advanced mode */}
+      {advancedOpen && results.length > 0 && (
+        <AdvancedMode
+          scenario={activeScenario}
+          onInflationChange={setCustomInflation}
+          onDepositRateChange={setCustomDepositRate}
+          coi={results[0].coi}
+          edo={results[0].edo}
+        />
+      )}
+
       {/* Results for each goal */}
       {results.map(({ goal, coi, edo, deposit, betterOption }, idx) => (
         <GoalResultSection
@@ -84,16 +114,7 @@ export default function ResultScreen({
           edo={edo}
           deposit={deposit}
           betterOption={betterOption}
-          scenario={scenario}
-          onScenarioChange={onScenarioChange}
           preference={preference}
-          showScenarioToggle={idx === 0}
-          advancedOpen={advancedOpen}
-          setAdvancedOpen={setAdvancedOpen}
-          customInflation={customInflation}
-          setCustomInflation={setCustomInflation}
-          customDepositRate={customDepositRate}
-          setCustomDepositRate={setCustomDepositRate}
           activeScenario={activeScenario}
         />
       ))}
@@ -174,16 +195,7 @@ function GoalResultSection({
   edo,
   deposit,
   betterOption,
-  scenario,
-  onScenarioChange,
   preference,
-  showScenarioToggle,
-  advancedOpen,
-  setAdvancedOpen,
-  customInflation,
-  setCustomInflation,
-  customDepositRate,
-  setCustomDepositRate,
   activeScenario,
 }: {
   goal: Goal;
@@ -193,94 +205,92 @@ function GoalResultSection({
   edo: BondCalculation;
   deposit: DepositCalculation;
   betterOption: "COI" | "EDO";
-  scenario: ScenarioKey;
-  onScenarioChange: (s: ScenarioKey) => void;
   preference: Preference;
-  showScenarioToggle: boolean;
-  advancedOpen: boolean;
-  setAdvancedOpen: (v: boolean) => void;
-  customInflation: number[] | null;
-  setCustomInflation: (v: number[] | null) => void;
-  customDepositRate: number[] | null;
-  setCustomDepositRate: (v: number[] | null) => void;
   activeScenario: Scenario;
 }) {
   const [sliderHorizon, setSliderHorizon] = useState(goal.horizonYears);
+  const [tableOpen, setTableOpen] = useState(false);
 
   // Recalculate with slider horizon
   const sliderResults = useMemo(() => {
-    if (sliderHorizon === goal.horizonYears) return { coi, edo };
+    if (sliderHorizon === goal.horizonYears) return { coi, edo, deposit };
     return calculateForGoal(
       { amount: goal.amount, horizonYears: sliderHorizon },
       activeScenario,
       preference
     );
-  }, [sliderHorizon, goal, coi, edo, activeScenario, preference]);
+  }, [sliderHorizon, goal, coi, edo, deposit, activeScenario, preference]);
 
   const explanation = getExplanation(sliderHorizon, betterOption);
   const goalLabel = goal.name || `Cel ${goalIndex + 1}`;
 
+  // Best result for hero
+  const best = betterOption === "COI" ? sliderResults.coi : sliderResults.edo;
+  const realValue = best.finalValueNet / (coi.yearlyResults[sliderHorizon - 1]?.cumulativeInflation ?? 1);
+
   return (
-    <div className="mb-12">
+    <div
+      className="mb-10 pb-10"
+      style={{ borderBottom: goalIndex < totalGoals - 1 ? "3px solid var(--border)" : "none" }}
+    >
       {/* Goal header — prominent section divider */}
-      {totalGoals > 1 && (
+      <div
+        className="flex items-center gap-3 mb-3 mt-2"
+        style={{ color: "var(--accent)" }}
+      >
         <div
-          className="flex items-center gap-3 mb-2"
-          style={{ color: "var(--accent)" }}
+          className="flex items-center justify-center w-9 h-9 rounded-full text-sm font-bold text-white"
+          style={{ backgroundColor: "var(--accent)" }}
         >
-          <div
-            className="flex items-center justify-center w-8 h-8 rounded-full text-sm font-bold text-white"
-            style={{ backgroundColor: "var(--accent)" }}
+          {goalIndex + 1}
+        </div>
+        <div>
+          <span className="text-sm font-semibold uppercase tracking-wide block">
+            Cel {goalIndex + 1}{totalGoals > 1 ? ` z ${totalGoals}` : ""}
+          </span>
+          <span
+            className="text-lg font-bold block"
+            style={{ color: "var(--text-primary)", fontFamily: "var(--font-heading)" }}
           >
-            {goalIndex + 1}
-          </div>
-          <span className="text-sm font-semibold uppercase tracking-wide">
-            Cel {goalIndex + 1} z {totalGoals}
+            {goalLabel} · {formatPLN(goal.amount)} · za {formatYears(goal.horizonYears)}
           </span>
         </div>
-      )}
-      <div
-        className="text-lg font-bold mb-4 pb-3"
-        style={{
-          color: "var(--text-primary)",
-          fontFamily: "var(--font-heading)",
-          borderBottom: "2px solid var(--border)",
-        }}
-      >
-        {goalLabel} · {formatPLN(goal.amount)} · za {formatYears(goal.horizonYears)}
       </div>
 
-      {/* Scenario toggle */}
-      {showScenarioToggle && (
-        <div className="mb-4 flex flex-wrap items-center gap-3">
-          <span className="text-sm" style={{ color: "var(--text-secondary)" }}>
-            Scenariusz inflacji:
-          </span>
-          <ScenarioToggle value={scenario} onChange={(s) => {
-            onScenarioChange(s);
-            setCustomInflation(null);
-            setCustomDepositRate(null);
-          }} />
-          <button
-            onClick={() => setAdvancedOpen(!advancedOpen)}
-            className="text-sm font-medium cursor-pointer ml-auto"
-            style={{ color: "var(--accent)" }}
+      {/* HERO — big number summary */}
+      <div
+        className="p-5 rounded-2xl mb-6 grid grid-cols-1 sm:grid-cols-2 gap-4"
+        style={{ backgroundColor: "var(--bg-section)", border: "1px solid var(--border)" }}
+      >
+        <div>
+          <div className="text-sm mb-1" style={{ color: "var(--text-secondary)" }}>
+            Szacowany zysk netto po {formatYears(sliderHorizon)}
+          </div>
+          <div
+            className="text-3xl sm:text-4xl font-bold"
+            style={{ color: "var(--scenario-low)", fontFamily: "var(--font-mono)" }}
           >
-            {advancedOpen ? "Ukryj założenia" : "Chcę zmienić założenia inflacji →"}
-          </button>
+            +{formatPLN(best.totalReturn)}
+          </div>
+          <div className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
+            z {betterOption} ({formatPercent(best.totalReturnPercent)})
+          </div>
         </div>
-      )}
-
-      {/* Advanced mode */}
-      {showScenarioToggle && advancedOpen && (
-        <AdvancedMode
-          scenario={activeScenario}
-          onInflationChange={setCustomInflation}
-          onDepositRateChange={setCustomDepositRate}
-          coi={coi}
-          edo={edo}
-        />
-      )}
+        <div>
+          <div className="text-sm mb-1" style={{ color: "var(--text-secondary)" }}>
+            Realna wartość Twoich pieniędzy
+          </div>
+          <div
+            className="text-2xl sm:text-3xl font-bold"
+            style={{ color: "var(--text-primary)", fontFamily: "var(--font-mono)" }}
+          >
+            {formatPLN(Math.round(realValue))}
+          </div>
+          <div className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
+            po uwzględnieniu inflacji
+          </div>
+        </div>
+      </div>
 
       {/* Bond cards side by side */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
@@ -296,14 +306,6 @@ function GoalResultSection({
           horizonYears={sliderHorizon}
           isBetter={betterOption === "EDO"}
         />
-      </div>
-
-      {/* Deposit comparison */}
-      <div
-        className="text-sm text-center mb-4 py-2"
-        style={{ color: "var(--text-muted)" }}
-      >
-        Dla porównania: lokata bankowa dałaby ok. {formatPLN(deposit.finalValueNet)}
       </div>
 
       {/* Explanation */}
@@ -336,9 +338,17 @@ function GoalResultSection({
         </p>
       </div>
 
+      {/* Benchmark — deposit comparison */}
+      <BenchmarkSection
+        deposit={sliderResults.deposit ?? deposit}
+        bestBond={best}
+        betterOption={betterOption}
+        horizonYears={sliderHorizon}
+      />
+
       {/* Interactive slider */}
       <div
-        className="p-5 rounded-xl mb-8"
+        className="p-5 rounded-xl mb-6"
         style={{ backgroundColor: "var(--bg-section)", border: "1px solid var(--border)" }}
       >
         <label className="block text-sm font-medium mb-2" style={{ color: "var(--text-primary)" }}>
@@ -368,49 +378,120 @@ function GoalResultSection({
         )}
       </div>
 
-      {/* Education blocks */}
-      <EducationBlocks />
-    </div>
-  );
-}
-
-function EducationBlocks() {
-  return (
-    <div className="space-y-4">
-      <h3
-        className="text-base font-bold"
-        style={{ color: "var(--text-primary)", fontFamily: "var(--font-heading)" }}
+      {/* Detailed table — hidden by default */}
+      <button
+        onClick={() => setTableOpen(!tableOpen)}
+        className="flex items-center gap-2 text-sm font-medium cursor-pointer mb-4"
+        style={{ color: "var(--text-secondary)" }}
       >
-        Co warto wiedzieć
-      </h3>
-      <EduCard
-        title="Dlaczego COI i EDO dają różne wyniki?"
-        text="COI wypłaca odsetki co rok — dostajesz je na konto i musisz je gdzieś ulokować (np. na lokacie). EDO nie wypłaca odsetek — dodaje je do kapitału, więc w następnym roku odsetki naliczane są od większej kwoty. To się nazywa kapitalizacja i przy dłuższym czasie robi dużą różnicę."
-      />
-      <EduCard
-        title="Co to jest indeksacja inflacją?"
-        text='Od 2. roku oprocentowanie obu obligacji zależy od inflacji. Im wyższa inflacja, tym wyższe oprocentowanie. Dlatego obligacje indeksowane chronią Twoje pieniądze — automatycznie "doganiają" wzrost cen.'
-      />
-      <EduCard
-        title="Co jeśli będę potrzebować pieniędzy wcześniej?"
-        text="Możesz wypłacić pieniądze przed terminem, ale zapłacisz opłatę (2 zł za każde 100 zł nominału). Przy COI to mniej bolesne, bo obligacja i tak trwa 4 lata. Przy EDO — wcześniejszy wykup oznacza, że nie wykorzystujesz pełnego potencjału kapitalizacji."
-      />
+        <span>{tableOpen ? "▾" : "▸"}</span>
+        Pokaż symulację rok po roku
+      </button>
+      {tableOpen && (
+        <YearByYearTable coi={coi} edo={edo} deposit={deposit} investedAmount={goal.amount} />
+      )}
     </div>
   );
 }
 
-function EduCard({ title, text }: { title: string; text: string }) {
+function BenchmarkSection({
+  deposit,
+  bestBond,
+  betterOption,
+  horizonYears,
+}: {
+  deposit: DepositCalculation;
+  bestBond: BondCalculation;
+  betterOption: "COI" | "EDO";
+  horizonYears: number;
+}) {
+  const advantage = bestBond.finalValueNet - deposit.finalValueNet;
+
   return (
     <div
-      className="p-4 rounded-xl"
+      className="p-4 rounded-xl mb-6 flex flex-col sm:flex-row sm:items-center gap-3"
       style={{ backgroundColor: "var(--bg-card)", border: "1px solid var(--border)" }}
     >
-      <h4 className="text-sm font-bold mb-1" style={{ color: "var(--text-primary)" }}>
-        📘 {title}
-      </h4>
-      <p className="text-sm leading-relaxed" style={{ color: "var(--text-secondary)" }}>
-        {text}
-      </p>
+      <div className="flex-1">
+        <div className="text-sm font-medium mb-1" style={{ color: "var(--text-primary)" }}>
+          Gdzie indziej zarobisz mniej?
+        </div>
+        <div className="text-sm" style={{ color: "var(--text-secondary)" }}>
+          Lokata bankowa po {formatYears(horizonYears)}: <strong style={{ fontFamily: "var(--font-mono)" }}>{formatPLN(deposit.finalValueNet)}</strong>
+          <span className="ml-2" style={{ color: "var(--text-muted)" }}>
+            (zysk netto: {formatPLN(deposit.totalReturn)})
+          </span>
+        </div>
+      </div>
+      {advantage > 0 && (
+        <div
+          className="text-sm font-semibold px-3 py-2 rounded-lg text-center shrink-0"
+          style={{ backgroundColor: "var(--accent-light)", color: "var(--accent)" }}
+        >
+          {betterOption} daje <strong>{formatPLN(Math.round(advantage))}</strong> więcej
+        </div>
+      )}
+    </div>
+  );
+}
+
+function YearByYearTable({
+  coi,
+  edo,
+  deposit,
+  investedAmount,
+}: {
+  coi: BondCalculation;
+  edo: BondCalculation;
+  deposit: DepositCalculation;
+  investedAmount: number;
+}) {
+  const maxYears = Math.max(coi.yearlyResults.length, edo.yearlyResults.length);
+  const TAX_RATE = 0.19;
+
+  return (
+    <div className="overflow-x-auto mb-6">
+      <table className="w-full text-xs" style={{ fontFamily: "var(--font-mono)" }}>
+        <thead>
+          <tr style={{ borderBottom: "2px solid var(--border)" }}>
+            <th className="py-2 px-2 text-left" style={{ color: "var(--text-muted)" }}>Rok</th>
+            <th className="py-2 px-2 text-right" style={{ color: "var(--coi-color)" }}>COI netto</th>
+            <th className="py-2 px-2 text-right" style={{ color: "var(--edo-color)" }}>EDO netto</th>
+            <th className="py-2 px-2 text-right" style={{ color: "var(--text-muted)" }}>Lokata</th>
+            <th className="py-2 px-2 text-right" style={{ color: "var(--text-muted)" }}>Infl. skum.</th>
+          </tr>
+        </thead>
+        <tbody>
+          {Array.from({ length: maxYears }, (_, i) => {
+            const coiYear = coi.yearlyResults[i];
+            const edoYear = edo.yearlyResults[i];
+            const depositValue = deposit.yearlyValues[i];
+
+            const edoGross = edoYear?.capitalAtEnd ?? 0;
+            const edoGain = edoGross - investedAmount;
+            const edoTax = edoGain > 0 ? edoGain * TAX_RATE : 0;
+            const edoNet = edoGross - edoTax;
+
+            return (
+              <tr key={i} style={{ borderBottom: "1px solid var(--border)" }}>
+                <td className="py-1.5 px-2" style={{ color: "var(--text-primary)" }}>{i + 1}</td>
+                <td className="py-1.5 px-2 text-right" style={{ color: "var(--coi-color)" }}>
+                  {coiYear ? formatPLN(coiYear.capitalAtEnd) : "—"}
+                </td>
+                <td className="py-1.5 px-2 text-right" style={{ color: "var(--edo-color)" }}>
+                  {edoYear ? formatPLN(edoNet) : "—"}
+                </td>
+                <td className="py-1.5 px-2 text-right" style={{ color: "var(--text-secondary)" }}>
+                  {depositValue ? formatPLN(depositValue) : "—"}
+                </td>
+                <td className="py-1.5 px-2 text-right" style={{ color: "var(--text-muted)" }}>
+                  {coiYear ? formatPercent((coiYear.cumulativeInflation - 1) * 100) : "—"}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -421,8 +502,8 @@ function SummaryTable({
   results: { goal: Goal; betterOption: "COI" | "EDO" }[];
 }) {
   const reasons: Record<string, string> = {
-    COI: "Bliski horyzontu zapadalności",
-    EDO: "Kapitalizacja daje przewagę",
+    COI: "Większa płynność",
+    EDO: "Lepsza ochrona długoterminowa",
   };
 
   return (
@@ -493,8 +574,8 @@ function MethodologySection() {
         Odsetki kapitalizowane (doliczane do kapitału). Podatek Belki (19%) pobierany jednorazowo przy wykupie od całego zysku.
       </p>
       <p>
-        <strong>Wcześniejszy wykup:</strong> Opłata 2 zł za każdą obligację (nominał 100 zł).
-        Dotyczy obu typów przy wykupie przed zapadalnością.
+        <strong>Wcześniejszy wykup:</strong> COI: 0,70 zł/szt. EDO: 2,00 zł/szt. (nominał 100 zł).
+        Opłata nie może przekroczyć narosłych odsetek — nie zjada kapitału początkowego.
       </p>
       <p>
         <strong>Lokata:</strong> Benchmark — oprocentowanie zależne od scenariusza inflacyjnego.

@@ -71,10 +71,12 @@ export function calculateCOI(
   const resultAtHorizon = yearlyResults[horizonYears - 1];
   let finalValueNet = resultAtHorizon.capitalAtEnd;
 
-  // Early redemption fee
+  // Early redemption fee — capped at accrued interest (cannot eat into principal)
   let earlyRedemptionFeeTotal = 0;
   if (earlyRedemption) {
-    earlyRedemptionFeeTotal = params.earlyRedemptionFee * numberOfBonds;
+    const rawFee = params.earlyRedemptionFee * numberOfBonds;
+    const accruedInterest = finalValueNet - investedAmount;
+    earlyRedemptionFeeTotal = Math.min(rawFee, Math.max(0, accruedInterest));
     finalValueNet -= earlyRedemptionFeeTotal;
   }
 
@@ -148,10 +150,12 @@ export function calculateEDO(
 
   let finalValueNet = capitalAtHorizon - totalTax;
 
-  // Early redemption fee
+  // Early redemption fee — capped at accrued interest (cannot eat into principal)
   let earlyRedemptionFeeTotal = 0;
   if (earlyRedemption) {
-    earlyRedemptionFeeTotal = params.earlyRedemptionFee * numberOfBonds;
+    const rawFee = params.earlyRedemptionFee * numberOfBonds;
+    const accruedGainAfterTax = finalValueNet - investedAmount;
+    earlyRedemptionFeeTotal = Math.min(rawFee, Math.max(0, accruedGainAfterTax));
     finalValueNet -= earlyRedemptionFeeTotal;
   }
 

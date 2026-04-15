@@ -9,7 +9,7 @@ export const BOND_PARAMS: Record<"COI" | "EDO", BondParams> = {
     margin: 0.015, // +1.50% above inflation (from year 2)
     interestPaymentFrequency: 12, // annual payout
     interestCapitalization: false, // interest PAID OUT, not capitalized
-    earlyRedemptionFee: 2.0, // 2.00 PLN per bond
+    earlyRedemptionFee: 0.7, // 0.70 PLN per bond (COI)
     swapPrice: 99.9,
     nominalValue: 100,
     purchasePrice: 99.9,
