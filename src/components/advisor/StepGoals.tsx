@@ -17,6 +17,12 @@ interface StepGoalsProps {
   onComplete: (goals: Goal[]) => void;
 }
 
+const GOAL_PLACEHOLDERS = [
+  "np. Mieszkanie dla córki",
+  "np. Studia dziecka",
+  "np. Poduszka bezpieczeństwa",
+];
+
 function createEmptyGoal(): Goal {
   return {
     id: generateId(),
@@ -150,7 +156,7 @@ function GoalCard({
           type="text"
           value={goal.name}
           onChange={(e) => onUpdate({ name: e.target.value })}
-          placeholder="np. Mieszkanie dla córki"
+          placeholder={GOAL_PLACEHOLDERS[index] || "np. Oszczędności"}
           className="w-full px-4 py-3 rounded-xl text-base outline-none transition-colors"
           style={{
             backgroundColor: "var(--bg-section)",
@@ -163,7 +169,7 @@ function GoalCard({
       {/* Amount */}
       <div className="mb-5">
         <label className="block text-sm mb-1.5" style={{ color: "var(--text-secondary)" }}>
-          Kwota
+          Kwota startowa
         </label>
         <div
           className="text-2xl font-bold mb-2"

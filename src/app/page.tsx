@@ -51,7 +51,7 @@ export default function Home() {
         </button>
 
         <p className="mt-6 text-sm" style={{ color: "var(--text-muted)" }}>
-          Bezpłatne narzędzie od Marcina Iwucia · Obliczenia oparte na aktualnych warunkach obligacji (kwiecień 2026)
+          Bezpłatne narzędzie · Obliczenia oparte na aktualnych warunkach obligacji (kwiecień 2026)
         </p>
       </div>
     </div>

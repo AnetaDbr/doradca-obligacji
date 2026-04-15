@@ -78,6 +78,8 @@ export default function ResultScreen({
         <GoalResultSection
           key={goal.id}
           goal={goal}
+          goalIndex={idx}
+          totalGoals={results.length}
           coi={coi}
           edo={edo}
           deposit={deposit}
@@ -136,7 +138,7 @@ export default function ResultScreen({
             Przejdź do obligacjeskarbowe.pl →
           </a>
           <a
-            href="https://marciniwuc.com"
+            href="https://marciniwuc.com/obligacje-indeksowane-inflacja-kalkulator/"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-block px-6 py-3 rounded-xl font-semibold transition-colors"
@@ -166,6 +168,8 @@ export default function ResultScreen({
 
 function GoalResultSection({
   goal,
+  goalIndex,
+  totalGoals,
   coi,
   edo,
   deposit,
@@ -183,6 +187,8 @@ function GoalResultSection({
   activeScenario,
 }: {
   goal: Goal;
+  goalIndex: number;
+  totalGoals: number;
   coi: BondCalculation;
   edo: BondCalculation;
   deposit: DepositCalculation;
@@ -212,11 +218,27 @@ function GoalResultSection({
   }, [sliderHorizon, goal, coi, edo, activeScenario, preference]);
 
   const explanation = getExplanation(sliderHorizon, betterOption);
-  const goalLabel = goal.name || `Cel ${goal.id.slice(0, 4)}`;
+  const goalLabel = goal.name || `Cel ${goalIndex + 1}`;
 
   return (
     <div className="mb-12">
-      {/* Goal header */}
+      {/* Goal header — prominent section divider */}
+      {totalGoals > 1 && (
+        <div
+          className="flex items-center gap-3 mb-2"
+          style={{ color: "var(--accent)" }}
+        >
+          <div
+            className="flex items-center justify-center w-8 h-8 rounded-full text-sm font-bold text-white"
+            style={{ backgroundColor: "var(--accent)" }}
+          >
+            {goalIndex + 1}
+          </div>
+          <span className="text-sm font-semibold uppercase tracking-wide">
+            Cel {goalIndex + 1} z {totalGoals}
+          </span>
+        </div>
+      )}
       <div
         className="text-lg font-bold mb-4 pb-3"
         style={{
