@@ -1,5 +1,4 @@
 export type BondType = "COI" | "EDO";
-export type Preference = "safety" | "growth";
 export type ScenarioKey = "low" | "moderate" | "high";
 
 export interface Goal {

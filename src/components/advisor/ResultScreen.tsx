@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Goal, Preference, ScenarioKey, Scenario, BondCalculation, DepositCalculation } from "@/lib/bonds/types";
+import { Goal, ScenarioKey, Scenario, BondCalculation, DepositCalculation } from "@/lib/bonds/types";
 import { SCENARIOS } from "@/lib/bonds/scenarios";
 import { calculateForGoal } from "@/lib/bonds/engine";
 import { getExplanation } from "@/lib/utils/recommendations";
@@ -13,7 +13,6 @@ import AdvancedMode from "./AdvancedMode";
 
 interface ResultScreenProps {
   goals: Goal[];
-  preference: Preference;
   scenario: ScenarioKey;
   onScenarioChange: (s: ScenarioKey) => void;
   onBack: () => void;
@@ -22,7 +21,6 @@ interface ResultScreenProps {
 
 export default function ResultScreen({
   goals,
-  preference,
   scenario,
   onScenarioChange,
   onBack,
@@ -48,9 +46,9 @@ export default function ResultScreen({
     () =>
       goals.map((goal) => ({
         goal,
-        ...calculateForGoal(goal, activeScenario, preference),
+        ...calculateForGoal(goal, activeScenario),
       })),
-    [goals, activeScenario, preference]
+    [goals, activeScenario]
   );
 
   return (
@@ -114,7 +112,6 @@ export default function ResultScreen({
           edo={edo}
           deposit={deposit}
           betterOption={betterOption}
-          preference={preference}
           activeScenario={activeScenario}
         />
       ))}
@@ -195,7 +192,6 @@ function GoalResultSection({
   edo,
   deposit,
   betterOption,
-  preference,
   activeScenario,
 }: {
   goal: Goal;
@@ -204,8 +200,7 @@ function GoalResultSection({
   coi: BondCalculation;
   edo: BondCalculation;
   deposit: DepositCalculation;
-  betterOption: "COI" | "EDO";
-  preference: Preference;
+  betterOption: "COI" | "EDO" | null;
   activeScenario: Scenario;
 }) {
   const [sliderHorizon, setSliderHorizon] = useState(goal.horizonYears);
@@ -213,19 +208,24 @@ function GoalResultSection({
 
   // Recalculate with slider horizon
   const sliderResults = useMemo(() => {
-    if (sliderHorizon === goal.horizonYears) return { coi, edo, deposit };
+    if (sliderHorizon === goal.horizonYears) return { coi, edo, deposit, betterOption };
     return calculateForGoal(
       { amount: goal.amount, horizonYears: sliderHorizon },
       activeScenario,
-      preference
     );
-  }, [sliderHorizon, goal, coi, edo, deposit, activeScenario, preference]);
+  }, [sliderHorizon, goal, coi, edo, deposit, betterOption, activeScenario]);
 
-  const explanation = getExplanation(sliderHorizon, betterOption);
+  const activeBetter = sliderResults.betterOption ?? betterOption;
+  const explanation = getExplanation(sliderHorizon, activeBetter);
   const goalLabel = goal.name || `Cel ${goalIndex + 1}`;
 
-  // Best result for hero
-  const best = betterOption === "COI" ? sliderResults.coi : sliderResults.edo;
+  // Best result for hero — when tied, pick whichever has higher net value
+  const best = activeBetter === "COI"
+    ? sliderResults.coi
+    : activeBetter === "EDO"
+      ? sliderResults.edo
+      : (sliderResults.coi.finalValueNet >= sliderResults.edo.finalValueNet ? sliderResults.coi : sliderResults.edo);
+  const bestLabel = activeBetter ?? (sliderResults.coi.finalValueNet >= sliderResults.edo.finalValueNet ? "COI" : "EDO");
   const realValue = best.finalValueNet / (coi.yearlyResults[sliderHorizon - 1]?.cumulativeInflation ?? 1);
 
   return (
@@ -273,7 +273,7 @@ function GoalResultSection({
             +{formatPLN(best.totalReturn)}
           </div>
           <div className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
-            z {betterOption} ({formatPercent(best.totalReturnPercent)})
+            z {bestLabel} ({formatPercent(best.totalReturnPercent)})
           </div>
         </div>
         <div>
@@ -298,13 +298,13 @@ function GoalResultSection({
           type="COI"
           result={sliderResults.coi}
           horizonYears={sliderHorizon}
-          isBetter={betterOption === "COI"}
+          isBetter={activeBetter === "COI"}
         />
         <BondCard
           type="EDO"
           result={sliderResults.edo}
           horizonYears={sliderHorizon}
-          isBetter={betterOption === "EDO"}
+          isBetter={activeBetter === "EDO"}
         />
       </div>
 
@@ -342,7 +342,7 @@ function GoalResultSection({
       <BenchmarkSection
         deposit={sliderResults.deposit ?? deposit}
         bestBond={best}
-        betterOption={betterOption}
+        betterOption={bestLabel}
         horizonYears={sliderHorizon}
       />
 
@@ -499,7 +499,7 @@ function YearByYearTable({
 function SummaryTable({
   results,
 }: {
-  results: { goal: Goal; betterOption: "COI" | "EDO" }[];
+  results: { goal: Goal; betterOption: "COI" | "EDO" | null }[];
 }) {
   const reasons: Record<string, string> = {
     COI: "Większa płynność",
@@ -543,12 +543,14 @@ function SummaryTable({
                   {formatYears(goal.horizonYears)}
                 </td>
                 <td className="py-2 pl-3 text-right font-bold" style={{
-                  color: betterOption === "COI" ? "var(--coi-color)" : "var(--edo-color)",
+                  color: betterOption === "COI" ? "var(--coi-color)" : betterOption === "EDO" ? "var(--edo-color)" : "var(--text-secondary)",
                 }}>
-                  {betterOption}
-                  <span className="font-normal text-xs ml-1" style={{ color: "var(--text-muted)" }}>
-                    ({reasons[betterOption]})
-                  </span>
+                  {betterOption ?? "Zbliżone"}
+                  {betterOption && (
+                    <span className="font-normal text-xs ml-1" style={{ color: "var(--text-muted)" }}>
+                      ({reasons[betterOption]})
+                    </span>
+                  )}
                 </td>
               </tr>
             ))}

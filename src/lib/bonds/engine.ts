@@ -247,31 +247,19 @@ export function edoNetValueAtYear(
 export function calculateForGoal(
   goal: { amount: number; horizonYears: number },
   scenario: Scenario,
-  preference: "safety" | "growth"
-): { coi: BondCalculation; edo: BondCalculation; deposit: DepositCalculation; betterOption: BondType } {
+): { coi: BondCalculation; edo: BondCalculation; deposit: DepositCalculation; betterOption: BondType | null } {
   const coi = calculateCOI(goal.amount, goal.horizonYears, scenario);
   const edo = calculateEDO(goal.amount, goal.horizonYears, scenario);
   const deposit = calculateDeposit(goal.amount, goal.horizonYears, scenario);
 
-  const betterOption = getBetterOption(goal.horizonYears, preference);
+  const betterOption = getBetterOption(goal.horizonYears);
 
   return { coi, edo, deposit, betterOption };
 }
 
-function getBetterOption(
-  horizonYears: number,
-  preference: "safety" | "growth"
-): BondType {
+function getBetterOption(horizonYears: number): BondType | null {
   if (horizonYears <= 3) return "COI";
-  if (horizonYears >= 8) return "EDO";
-
-  // Zone 4-7 years — depends on preference
-  if (horizonYears <= 4) {
-    return preference === "growth" ? "EDO" : "COI";
-  }
-  if (horizonYears <= 5) {
-    return preference === "safety" ? "COI" : "EDO";
-  }
-  // 6-7 years
-  return "EDO";
+  if (horizonYears >= 6) return "EDO";
+  // 4-5 years: too close to call — show both as equal
+  return null;
 }
