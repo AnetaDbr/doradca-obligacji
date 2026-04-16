@@ -33,8 +33,8 @@ export const BOND_PARAMS: Record<"COI" | "EDO", BondParams> = {
 
 export const TAX_RATE = 0.19; // Belka tax — 19%
 export const DEFAULT_DEPOSIT_RATE = 0.036; // 3.6% average deposit rate
-export const MIN_AMOUNT = 10_000;
-export const MAX_AMOUNT = 1_000_000;
+export const MIN_AMOUNT = 1_000;
+export const MAX_AMOUNT = 500_000;
 export const DEFAULT_AMOUNT = 100_000;
 export const MIN_HORIZON = 1;
 export const MAX_HORIZON = 12;

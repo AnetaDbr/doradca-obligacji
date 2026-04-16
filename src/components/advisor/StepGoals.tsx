@@ -268,6 +268,12 @@ function AmountInput({
 
       {/* Text input — primary entry point */}
       <div className="relative mb-3">
+        <span
+          className="absolute left-4 top-1/2 -translate-y-1/2 text-base font-semibold pointer-events-none"
+          style={{ color: "var(--text-muted)" }}
+        >
+          zł
+        </span>
         <input
           ref={inputRef}
           type="text"
@@ -276,7 +282,7 @@ function AmountInput({
           onChange={handleTextChange}
           onFocus={handleFocus}
           onBlur={handleBlur}
-          className="w-full px-4 py-3 rounded-xl text-2xl font-bold outline-none transition-colors text-right pr-14"
+          className="w-full pl-10 pr-4 py-3 rounded-xl text-2xl font-bold outline-none transition-colors text-right"
           style={{
             backgroundColor: "var(--bg-section)",
             border: error ? "1.5px solid var(--scenario-moderate)" : "1px solid var(--border)",
@@ -285,12 +291,6 @@ function AmountInput({
           }}
           aria-label="Kwota startowa w złotych"
         />
-        <span
-          className="absolute right-4 top-1/2 -translate-y-1/2 text-base font-semibold pointer-events-none"
-          style={{ color: "var(--text-muted)" }}
-        >
-          zł
-        </span>
       </div>
 
       {/* Error / rounding hint */}
