@@ -1,265 +1,354 @@
 import { BOND_PARAMS, TAX_RATE } from "./constants";
+import { MAX_HORIZON } from "./constants";
 import {
-  BondCalculation,
-  BondType,
-  DepositCalculation,
+  ComparisonResult,
   Scenario,
-  YearlyResult,
+  Winner,
+  YearDataPoint,
 } from "./types";
+import { formatPLN, formatYears } from "../utils/format";
+
+// Treat outcomes within 1% of invested as "too close to call"
+const CLOSE_THRESHOLD_PCT = 1;
+
+// ════════════════════════════════════════════════════════════════
+// COI TIMELINE — with automatic rollover every 4 years
+// ════════════════════════════════════════════════════════════════
 
 /**
- * Calculate COI (4-year) bond returns.
- *
- * COI pays out interest annually. Paid-out interest is reinvested
- * in a deposit at the scenario's deposit rate. At maturity or early
- * redemption the investor receives the nominal value plus all
- * reinvested interest (net of taxes).
+ * Model:
+ * - COI is a 4-year bond. Interest paid out annually, reinvested on deposit.
+ * - At year 4 (maturity): no early redemption fee. All capital (nominal +
+ *   reinvested interest pool) rolls into a new COI at the swap price (99.90).
+ * - Same rollover at year 8. Third cycle runs years 9–12.
+ * - At non-maturity years: early redemption fee (0.70 zł/bond) deducted,
+ *   capped at accumulated interest (cannot touch principal).
  */
-export function calculateCOI(
+function buildCOITimeline(
   investedAmount: number,
-  horizonYears: number,
-  scenario: Scenario
-): BondCalculation {
+  maxYears: number,
+  scenario: Scenario,
+): { values: number[]; rates: number[]; fees: number[] } {
   const params = BOND_PARAMS.COI;
-  const maturityYears = params.maturityMonths / 12;
-  const earlyRedemption = horizonYears < maturityYears;
+  const values: number[] = [];
+  const rates: number[] = [];
+  const fees: number[] = [];
 
-  const numberOfBonds = investedAmount / params.nominalValue;
-  const nominal = params.nominalValue; // per bond
+  let numberOfBonds = investedAmount / params.purchasePrice;
+  let reinvestedPool = 0; // net interest accumulated on deposit (after Belka each year)
+  let cycleStartYear = 1;
 
-  const yearlyResults: YearlyResult[] = [];
-  let cumulativeInflation = 1;
-  // Track reinvested interest pool (net interest placed on deposit)
-  let reinvestedPool = 0;
+  for (let year = 1; year <= maxYears; year++) {
+    const cycleYear = year - cycleStartYear + 1; // 1–4 within each cycle
+    const isFirstOfCycle = cycleYear === 1;
+    const isMaturity = cycleYear === 4;
 
-  const yearsToCalculate = Math.max(horizonYears, maturityYears);
-
-  for (let year = 1; year <= yearsToCalculate; year++) {
-    const inflationRate = (scenario.inflation[year - 1] ?? scenario.inflation[scenario.inflation.length - 1]) / 100;
-    const depositRate = (scenario.depositRate[year - 1] ?? scenario.depositRate[scenario.depositRate.length - 1]) / 100;
-
-    cumulativeInflation *= 1 + inflationRate;
+    const inflRate = getRate(scenario.inflation, year);
+    const depRate = getRate(scenario.depositRate, year);
 
     // Interest rate for this year
-    const interestRate =
-      year === 1 ? params.firstPeriodRate : inflationRate + params.margin;
+    const rate = isFirstOfCycle ? params.firstPeriodRate : inflRate + params.margin;
+    rates.push(rate);
 
-    const interestGross = nominal * interestRate;
-    const tax = interestGross * TAX_RATE;
-    const interestNet = interestGross - tax;
+    const interestGross = numberOfBonds * params.nominalValue * rate;
+    const interestTax = interestGross * TAX_RATE;
+    const interestNet = interestGross - interestTax;
 
-    // Reinvested pool grows by deposit rate (net of Belka tax on deposit interest)
-    reinvestedPool = reinvestedPool * (1 + depositRate * (1 - TAX_RATE));
-    // Add this year's net interest to the pool
-    reinvestedPool += interestNet;
+    // Reinvested pool earns deposit rate (Belka paid annually on deposit)
+    const poolGrowth = reinvestedPool * depRate * (1 - TAX_RATE);
+    reinvestedPool += poolGrowth + interestNet;
 
-    // Capital at end = nominal + reinvested pool (per bond)
-    const capitalAtEnd = nominal + reinvestedPool;
+    // Cash-out value if you exited at end of this year
+    const grossValue = numberOfBonds * params.nominalValue + reinvestedPool;
 
-    yearlyResults.push({
-      year,
-      interestRate,
-      interestGross: interestGross * numberOfBonds,
-      tax: tax * numberOfBonds,
-      interestNet: interestNet * numberOfBonds,
-      capitalAtEnd: capitalAtEnd * numberOfBonds,
-      cumulativeInflation,
-    });
+    if (isMaturity) {
+      // Maturity: no fee, full payout. Roll everything into the next cycle.
+      fees.push(0);
+      values.push(grossValue);
+
+      numberOfBonds = grossValue / params.swapPrice; // swap into next emission
+      reinvestedPool = 0;
+      cycleStartYear = year + 1;
+    } else {
+      // Early exit: fee capped at accrued interest (cannot erode principal)
+      const rawFee = params.earlyRedemptionFee * numberOfBonds;
+      const fee = Math.min(rawFee, Math.max(0, grossValue - investedAmount));
+      fees.push(fee);
+      values.push(grossValue - fee);
+    }
   }
 
-  // Calculate final value at the horizon
-  const resultAtHorizon = yearlyResults[horizonYears - 1];
-  let finalValueNet = resultAtHorizon.capitalAtEnd;
-
-  // Early redemption fee — capped at accrued interest (cannot eat into principal)
-  let earlyRedemptionFeeTotal = 0;
-  if (earlyRedemption) {
-    const rawFee = params.earlyRedemptionFee * numberOfBonds;
-    const accruedInterest = finalValueNet - investedAmount;
-    earlyRedemptionFeeTotal = Math.min(rawFee, Math.max(0, accruedInterest));
-    finalValueNet -= earlyRedemptionFeeTotal;
-  }
-
-  const totalReturn = finalValueNet - investedAmount;
-  const totalReturnPercent = (totalReturn / investedAmount) * 100;
-
-  return {
-    bondType: "COI",
-    investedAmount,
-    horizonYears,
-    finalValueNet: Math.round(finalValueNet * 100) / 100,
-    totalReturn: Math.round(totalReturn * 100) / 100,
-    totalReturnPercent: Math.round(totalReturnPercent * 100) / 100,
-    yearlyResults: yearlyResults.slice(0, Math.max(horizonYears + 2, 10)),
-    earlyRedemption,
-    earlyRedemptionFee: earlyRedemptionFeeTotal,
-  };
+  return { values, rates, fees };
 }
 
+// ════════════════════════════════════════════════════════════════
+// EDO TIMELINE — capitalisation, single maturity at year 10
+// ════════════════════════════════════════════════════════════════
+
 /**
- * Calculate EDO (10-year) bond returns.
- *
- * EDO capitalizes interest — no payouts until redemption.
- * Belka tax is paid once, at redemption, on total accumulated gain.
+ * Model:
+ * - EDO is a 10-year bond. Interest capitalised (added to principal each year).
+ * - Belka tax (19%) paid ONCE at redemption on the total accumulated gain.
+ * - At year 10: full payout, no early redemption fee.
+ * - Years 11–12: post-maturity proceeds parked on deposit (Belka paid annually).
+ * - Before maturity: early redemption fee (2.00 zł/bond) + Belka on gain to date.
+ *   Fee capped at accrued interest (cannot erode principal).
  */
-export function calculateEDO(
+function buildEDOTimeline(
   investedAmount: number,
-  horizonYears: number,
-  scenario: Scenario
-): BondCalculation {
-  const params = BOND_PARAMS.EDO;
-  const maturityYears = params.maturityMonths / 12;
-  const earlyRedemption = horizonYears < maturityYears;
-
-  const numberOfBonds = investedAmount / params.nominalValue;
-  const nominal = params.nominalValue;
-
-  const yearlyResults: YearlyResult[] = [];
-  let capital = nominal; // grows each year via capitalization (per bond)
-  let cumulativeInflation = 1;
-
-  const yearsToCalculate = Math.max(horizonYears, maturityYears);
-
-  for (let year = 1; year <= yearsToCalculate; year++) {
-    const inflationRate = (scenario.inflation[year - 1] ?? scenario.inflation[scenario.inflation.length - 1]) / 100;
-
-    cumulativeInflation *= 1 + inflationRate;
-
-    const interestRate =
-      year === 1 ? params.firstPeriodRate : inflationRate + params.margin;
-
-    const interestGross = capital * interestRate;
-    // No tax during the holding period — tax at redemption only
-    capital += interestGross;
-
-    yearlyResults.push({
-      year,
-      interestRate,
-      interestGross: interestGross * numberOfBonds,
-      tax: 0, // deferred
-      interestNet: interestGross * numberOfBonds, // gross = net during holding
-      capitalAtEnd: capital * numberOfBonds,
-      cumulativeInflation,
-    });
-  }
-
-  // At the horizon, calculate final value net of tax
-  const capitalAtHorizon = yearlyResults[horizonYears - 1].capitalAtEnd;
-  const totalGainBrutto = capitalAtHorizon - investedAmount;
-  const totalTax = totalGainBrutto * TAX_RATE;
-
-  let finalValueNet = capitalAtHorizon - totalTax;
-
-  // Early redemption fee — capped at accrued interest (cannot eat into principal)
-  let earlyRedemptionFeeTotal = 0;
-  if (earlyRedemption) {
-    const rawFee = params.earlyRedemptionFee * numberOfBonds;
-    const accruedGainAfterTax = finalValueNet - investedAmount;
-    earlyRedemptionFeeTotal = Math.min(rawFee, Math.max(0, accruedGainAfterTax));
-    finalValueNet -= earlyRedemptionFeeTotal;
-  }
-
-  const totalReturn = finalValueNet - investedAmount;
-  const totalReturnPercent = (totalReturn / investedAmount) * 100;
-
-  // Update yearly results to show deferred tax impact for display
-  const updatedYearlyResults = yearlyResults
-    .slice(0, Math.max(horizonYears + 2, 10))
-    .map((yr) => {
-      const gainAtYear = yr.capitalAtEnd - investedAmount;
-      const taxAtYear = gainAtYear > 0 ? gainAtYear * TAX_RATE : 0;
-      return {
-        ...yr,
-        tax: taxAtYear,
-        // capitalAtEnd remains gross (before tax) for chart display;
-        // net value is computed at display time
-      };
-    });
-
-  return {
-    bondType: "EDO",
-    investedAmount,
-    horizonYears,
-    finalValueNet: Math.round(finalValueNet * 100) / 100,
-    totalReturn: Math.round(totalReturn * 100) / 100,
-    totalReturnPercent: Math.round(totalReturnPercent * 100) / 100,
-    yearlyResults: updatedYearlyResults,
-    earlyRedemption,
-    earlyRedemptionFee: earlyRedemptionFeeTotal,
-  };
-}
-
-/**
- * Calculate deposit (bank savings) for comparison benchmark.
- */
-export function calculateDeposit(
-  investedAmount: number,
-  horizonYears: number,
-  scenario: Scenario
-): DepositCalculation {
-  let capital = investedAmount;
-  const yearlyValues: number[] = [];
-
-  for (let year = 1; year <= Math.max(horizonYears + 2, 10); year++) {
-    const depositRate = (scenario.depositRate[year - 1] ?? scenario.depositRate[scenario.depositRate.length - 1]) / 100;
-    const interestGross = capital * depositRate;
-    const tax = interestGross * TAX_RATE;
-    capital += interestGross - tax;
-    yearlyValues.push(capital);
-  }
-
-  const finalValueNet = yearlyValues[horizonYears - 1];
-  const totalReturn = finalValueNet - investedAmount;
-  const totalReturnPercent = (totalReturn / investedAmount) * 100;
-
-  return {
-    investedAmount,
-    horizonYears,
-    finalValueNet: Math.round(finalValueNet * 100) / 100,
-    totalReturn: Math.round(totalReturn * 100) / 100,
-    totalReturnPercent: Math.round(totalReturnPercent * 100) / 100,
-    yearlyValues,
-  };
-}
-
-/**
- * Net value of EDO at a given year (after tax and potential early redemption fee).
- * Used for chart display.
- */
-export function edoNetValueAtYear(
-  yearlyResult: YearlyResult,
-  investedAmount: number,
-  earlyRedemption: boolean,
-  numberOfBonds: number
-): number {
-  const gain = yearlyResult.capitalAtEnd - investedAmount;
-  const tax = gain > 0 ? gain * TAX_RATE : 0;
-  let net = yearlyResult.capitalAtEnd - tax;
-  if (earlyRedemption) {
-    net -= BOND_PARAMS.EDO.earlyRedemptionFee * numberOfBonds;
-  }
-  return net;
-}
-
-/**
- * Calculate all results for a given goal.
- */
-export function calculateForGoal(
-  goal: { amount: number; horizonYears: number },
+  maxYears: number,
   scenario: Scenario,
-): { coi: BondCalculation; edo: BondCalculation; deposit: DepositCalculation; betterOption: BondType | null } {
-  const coi = calculateCOI(goal.amount, goal.horizonYears, scenario);
-  const edo = calculateEDO(goal.amount, goal.horizonYears, scenario);
-  const deposit = calculateDeposit(goal.amount, goal.horizonYears, scenario);
+): { values: number[]; rates: number[]; fees: number[] } {
+  const params = BOND_PARAMS.EDO;
+  const values: number[] = [];
+  const rates: number[] = [];
+  const fees: number[] = [];
 
-  const betterOption = getBetterOption(goal.horizonYears);
+  const numberOfBonds = investedAmount / params.purchasePrice;
+  let capitalPerBond = params.nominalValue; // grows through capitalisation
+  let postMaturityCapital = 0;
+  let matured = false;
 
-  return { coi, edo, deposit, betterOption };
+  for (let year = 1; year <= maxYears; year++) {
+    const inflRate = getRate(scenario.inflation, year);
+    const depRate = getRate(scenario.depositRate, year);
+
+    if (!matured) {
+      const rate = year === 1 ? params.firstPeriodRate : inflRate + params.margin;
+      rates.push(rate);
+      capitalPerBond = capitalPerBond * (1 + rate); // capitalise
+
+      const totalGross = capitalPerBond * numberOfBonds;
+      const gain = totalGross - investedAmount;
+      const tax = Math.max(0, gain * TAX_RATE);
+      const afterTax = totalGross - tax;
+
+      if (year === 10) {
+        // Maturity: no fee
+        fees.push(0);
+        values.push(afterTax);
+        postMaturityCapital = afterTax;
+        matured = true;
+      } else {
+        // Early exit: fee capped at accrued interest
+        const rawFee = params.earlyRedemptionFee * numberOfBonds;
+        const fee = Math.min(rawFee, Math.max(0, afterTax - investedAmount));
+        fees.push(fee);
+        values.push(afterTax - fee);
+      }
+    } else {
+      // Post-maturity: capital on deposit, Belka paid each year
+      rates.push(depRate);
+      fees.push(0);
+      const depositGross = postMaturityCapital * depRate;
+      const depositTax = depositGross * TAX_RATE;
+      postMaturityCapital += depositGross - depositTax;
+      values.push(postMaturityCapital); // always > previous value (depRate > 0)
+    }
+  }
+
+  return { values, rates, fees };
 }
 
-function getBetterOption(horizonYears: number): BondType | null {
-  if (horizonYears <= 3) return "COI";
-  if (horizonYears >= 6) return "EDO";
-  // 4-5 years: too close to call — show both as equal
-  return null;
+// ════════════════════════════════════════════════════════════════
+// DEPOSIT BASELINE
+// ════════════════════════════════════════════════════════════════
+
+function buildDepositTimeline(
+  investedAmount: number,
+  maxYears: number,
+  scenario: Scenario,
+): number[] {
+  const values: number[] = [];
+  let capital = investedAmount;
+  for (let year = 1; year <= maxYears; year++) {
+    const depRate = getRate(scenario.depositRate, year);
+    capital += capital * depRate * (1 - TAX_RATE);
+    values.push(capital);
+  }
+  return values;
+}
+
+// ════════════════════════════════════════════════════════════════
+// INFLATION REFERENCE — nominal amount needed to maintain purchasing power
+// This line ALWAYS increases; it never drops.
+// ════════════════════════════════════════════════════════════════
+
+function buildInflationTimeline(
+  investedAmount: number,
+  maxYears: number,
+  scenario: Scenario,
+): { values: number[]; cumulativeFactors: number[] } {
+  const values: number[] = [];
+  const cumulativeFactors: number[] = [];
+  let cumulative = 1;
+  for (let year = 1; year <= maxYears; year++) {
+    const inflRate = getRate(scenario.inflation, year);
+    cumulative *= 1 + inflRate; // strictly increasing: inflRate ≥ 0
+    cumulativeFactors.push(cumulative);
+    values.push(investedAmount * cumulative);
+  }
+  return { values, cumulativeFactors };
+}
+
+// ════════════════════════════════════════════════════════════════
+// MAIN ENTRY POINT — single source of truth for all UI
+// ════════════════════════════════════════════════════════════════
+
+export function calculateComparison(
+  investedAmount: number,
+  horizonYears: number,
+  scenario: Scenario,
+): ComparisonResult {
+  const maxYears = MAX_HORIZON; // always compute full 12 years for the chart
+
+  const coiData = buildCOITimeline(investedAmount, maxYears, scenario);
+  const edoData = buildEDOTimeline(investedAmount, maxYears, scenario);
+  const depositValues = buildDepositTimeline(investedAmount, maxYears, scenario);
+  const inflationData = buildInflationTimeline(investedAmount, maxYears, scenario);
+
+  // ── Unified 12-year data (powers the chart, year-by-year table, advanced mode) ──
+  const yearlyData: YearDataPoint[] = Array.from({ length: maxYears }, (_, i) => ({
+    year: i + 1,
+    coiNet: round2(coiData.values[i]),
+    edoNet: round2(edoData.values[i]),
+    depositNet: round2(depositValues[i]),
+    inflationRef: round2(inflationData.values[i]),   // always ≥ previous
+    cumulativeInflation: inflationData.cumulativeFactors[i],
+    coiCycleEnd: (i + 1) % 4 === 0,
+    edoMaturity: i + 1 === 10,
+    coiRate: coiData.rates[i],
+    edoRate: edoData.rates[i],
+  }));
+
+  // ── Values at the user's horizon (h = array index = year - 1) ──
+  const h = horizonYears - 1;
+  const coiAtHorizon = round2(coiData.values[h]);
+  const edoAtHorizon = round2(edoData.values[h]);
+  const depositAtHorizon = round2(depositValues[h]);
+
+  const coiReturn = round2(coiAtHorizon - investedAmount);
+  const edoReturn = round2(edoAtHorizon - investedAmount);
+  const depositReturn = round2(depositAtHorizon - investedAmount);
+
+  const coiReturnPct = round2((coiReturn / investedAmount) * 100);
+  const edoReturnPct = round2((edoReturn / investedAmount) * 100);
+  const depositReturnPct = round2((depositReturn / investedAmount) * 100);
+
+  // ── Winner: determined by actual numbers, not by heuristics ──
+  const diff = coiAtHorizon - edoAtHorizon;
+  const diffPct = Math.abs(diff / investedAmount) * 100;
+
+  let winner: Winner;
+  if (diffPct < CLOSE_THRESHOLD_PCT) {
+    winner = "CLOSE";
+  } else if (diff > 0) {
+    winner = "COI";
+  } else {
+    winner = "EDO";
+  }
+
+  const advantage = round2(Math.abs(diff));
+  const advantagePct = round2(diffPct);
+
+  // ── Real value: winner's nominal adjusted for inflation ──
+  const bestNominal =
+    winner === "COI" ? coiAtHorizon
+    : winner === "EDO" ? edoAtHorizon
+    : Math.max(coiAtHorizon, edoAtHorizon);
+  const realValueAtHorizon = round2(bestNominal / inflationData.cumulativeFactors[h]);
+
+  // ── Early redemption flags and ACTUAL fees from the timeline ──
+  // COI: no fee at years 4, 8, 12 (end of each 4-year cycle)
+  const coiEarlyRedemption = coiData.fees[h] > 0;
+  // EDO: no fee at year 10 (maturity) or post-maturity years
+  const edoEarlyRedemption = edoData.fees[h] > 0;
+
+  const coiEarlyRedemptionFee = round2(coiData.fees[h]);
+  const edoEarlyRedemptionFee = round2(edoData.fees[h]);
+
+  const explanation = generateExplanation(
+    horizonYears, winner, advantage, coiAtHorizon, edoAtHorizon, investedAmount,
+  );
+
+  return {
+    investedAmount,
+    horizonYears,
+    coiAtHorizon,
+    edoAtHorizon,
+    depositAtHorizon,
+    realValueAtHorizon,
+    coiReturn,
+    edoReturn,
+    depositReturn,
+    coiReturnPct,
+    edoReturnPct,
+    depositReturnPct,
+    winner,
+    advantage,
+    advantagePct,
+    explanation,
+    yearlyData,
+    coiEarlyRedemption,
+    coiEarlyRedemptionFee,
+    edoEarlyRedemption,
+    edoEarlyRedemptionFee,
+  };
+}
+
+// ════════════════════════════════════════════════════════════════
+// EXPLANATION — generated from actual numbers, scenario-aware
+// ════════════════════════════════════════════════════════════════
+
+function generateExplanation(
+  horizonYears: number,
+  winner: Winner,
+  advantage: number,
+  coiNet: number,
+  edoNet: number,
+  investedAmount: number,
+): string {
+  void coiNet; void edoNet; void investedAmount; // used indirectly via winner/advantage
+  const adv = formatPLN(Math.round(advantage));
+  const hor = formatYears(horizonYears);
+  const prefix = `W tym scenariuszu inflacyjnym, przy horyzoncie ${hor},`;
+
+  if (winner === "CLOSE") {
+    if (horizonYears <= 4) {
+      return `${prefix} obie opcje dają bardzo zbliżone wyniki (różnica do ${adv}). COI ma zapadalność bliską Twojemu celowi i niższą opłatę za wcześniejszy wykup. EDO ma wyższą marżę, ale przy krótkim horyzoncie nie zdąży jej w pełni wykorzystać. Wynik może się zmienić przy innym scenariuszu inflacyjnym — sprawdź suwak powyżej.`;
+    }
+    return `${prefix} obie opcje dają bardzo zbliżone wyniki (różnica do ${adv}). Przy tym horyzoncie przewagi i wady obu instrumentów niemal się równoważą. Porównaj szczegóły — wybór może zależeć od Twojej preferencji co do płynności i pewności dostępu do środków.`;
+  }
+
+  if (winner === "COI") {
+    if (horizonYears <= 4) {
+      return `${prefix} lepiej wypada COI — o ${adv}. Zapadalność COI (4 lata) jest bliska Twojemu celowi, więc unikasz wyższej opłaty za wcześniejszy wykup charakterystycznej dla EDO. Przy wyższej inflacji lub dłuższym horyzoncie EDO mogłoby wypaść lepiej — sprawdź inne scenariusze.`;
+    }
+    if (horizonYears <= 8) {
+      return `${prefix} lepiej wypada COI — o ${adv}. Reinwestycja odsetek po każdym cyklu 4-letnim, przy obecnych stawkach lokat, okazuje się korzystniejsza niż kapitalizacja EDO. Pamiętaj: przy wyższej inflacji lub dłuższym horyzoncie wynik mógłby być inny.`;
+    }
+    return `${prefix} lepiej wypada COI — o ${adv}. Po trzech cyklach 4-letnich z reinwestycją odsetek COI akumuluje więcej niż EDO ze swoją kapitalizacją. To scenariusz rzadki — zwykle przy horyzontach >8 lat EDO wykazuje przewagę; warto sprawdzić inne założenia inflacyjne.`;
+  }
+
+  // EDO wins
+  if (horizonYears <= 4) {
+    return `${prefix} lepiej wypada EDO — o ${adv}. Wyższa marża nad inflacją (+2% zamiast +1,5%) i brak podatku Belki przez cały okres (dopiero przy wykupie) rekompensują wyższą opłatę za wcześniejszy wykup. Wynik jest wrażliwy na scenariusz — przy niższej inflacji COI mogłoby być lepszym wyborem.`;
+  }
+  if (horizonYears <= 10) {
+    return `${prefix} lepiej wypada EDO — o ${adv}. Wyższa marża (+2% vs +1,5%) w połączeniu z kapitalizacją odsetek (procent składany bez corocznego Belki) daje rosnącą przewagę z każdym rokiem. Wynik może się różnić przy innych założeniach inflacyjnych.`;
+  }
+  return `${prefix} wyraźnie lepiej wypada EDO — o ${adv}. Pełna kapitalizacja przez 10 lat, wyższa marża, a po zapadalności dalszy wzrost na depozycie — przy długich horyzontach to zdecydowana przewaga EDO. Jest ona szczególnie widoczna, gdy inflacja utrzymuje się na umiarkowanym lub wysokim poziomie.`;
+}
+
+// ════════════════════════════════════════════════════════════════
+// HELPERS
+// ════════════════════════════════════════════════════════════════
+
+function getRate(rates: readonly number[], year: number): number {
+  const val = rates[year - 1] ?? rates[rates.length - 1];
+  return val / 100;
+}
+
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
 }

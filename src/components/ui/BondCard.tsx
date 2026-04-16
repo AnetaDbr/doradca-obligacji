@@ -1,6 +1,6 @@
 "use client";
 
-import { BondCalculation, BondType } from "@/lib/bonds/types";
+import { BondType } from "@/lib/bonds/types";
 import { BOND_PARAMS } from "@/lib/bonds/constants";
 import { formatPLN, formatPercent, formatYears } from "@/lib/utils/format";
 import CountUp from "./CountUp";
@@ -8,29 +8,38 @@ import InfoTooltip from "./Tooltip";
 
 interface BondCardProps {
   type: BondType;
-  result: BondCalculation;
   horizonYears: number;
   isBetter: boolean;
+  finalValueNet: number;
+  totalReturn: number;
+  totalReturnPercent: number;
+  earlyRedemption: boolean;
+  earlyRedemptionFee: number;
+  investedAmount: number;
 }
 
-const CARD_LABELS: Record<BondType, { short: string; when: string }> = {
-  COI: {
-    short: "Większa płynność",
-    when: "Lepszy wybór, gdy potrzebujesz pieniędzy w ciągu 4 lat",
-  },
-  EDO: {
-    short: "Najlepsza ochrona długoterminowa",
-    when: "Lepszy wybór przy horyzoncie powyżej 4 lat",
-  },
+const CARD_LABELS: Record<BondType, { short: string }> = {
+  COI: { short: "Większa płynność" },
+  EDO: { short: "Najlepsza ochrona długoterminowa" },
 };
 
-export default function BondCard({ type, result, horizonYears, isBetter }: BondCardProps) {
+export default function BondCard({
+  type,
+  horizonYears,
+  isBetter,
+  finalValueNet,
+  totalReturn,
+  totalReturnPercent,
+  earlyRedemption,
+  earlyRedemptionFee,
+  investedAmount,
+}: BondCardProps) {
   const params = BOND_PARAMS[type];
   const colorVar = type === "COI" ? "--coi-color" : "--edo-color";
   const lightVar = type === "COI" ? "--coi-light" : "--edo-light";
   const label = CARD_LABELS[type];
 
-  const numberOfBonds = result.investedAmount / params.nominalValue;
+  const numberOfBonds = investedAmount / params.nominalValue;
   const feePerBond = params.earlyRedemptionFee;
 
   return (
@@ -77,13 +86,13 @@ export default function BondCard({ type, result, horizonYears, isBetter }: BondC
           className="text-3xl font-bold"
           style={{ color: "var(--text-primary)", fontFamily: "var(--font-mono)" }}
         >
-          <CountUp value={result.finalValueNet} />
+          <CountUp value={finalValueNet} />
         </div>
         <div
           className="text-sm font-medium mt-1"
-          style={{ color: result.totalReturn >= 0 ? "var(--scenario-low)" : "var(--scenario-high)" }}
+          style={{ color: totalReturn >= 0 ? "var(--scenario-low)" : "var(--scenario-high)" }}
         >
-          {result.totalReturn >= 0 ? "+" : ""}{formatPLN(result.totalReturn)} ({formatPercent(result.totalReturnPercent)})
+          {totalReturn >= 0 ? "+" : ""}{formatPLN(totalReturn)} ({formatPercent(totalReturnPercent)})
         </div>
       </div>
 
@@ -116,15 +125,15 @@ export default function BondCard({ type, result, horizonYears, isBetter }: BondC
               : "wypłacane co rok"
           }
         />
-        {result.earlyRedemption && (
+        {earlyRedemption && (
           <DetailRow
             label={
               <InfoTooltip
                 term="Wcz. wykup"
-                explanation={`Opłata za przedterminowy wykup: ${formatPLN(feePerBond, 2)} za każdą obligację (100 zł). Przy ${numberOfBonds.toLocaleString("pl-PL")} szt. to koszt ${formatPLN(result.earlyRedemptionFee)}. Opłata nie może przekroczyć narosłych odsetek — nie zjada kapitału.`}
+                explanation={`Opłata za przedterminowy wykup: ${formatPLN(feePerBond, 2)} za każdą obligację (100 zł). Przy ${numberOfBonds.toLocaleString("pl-PL")} szt. to koszt ${formatPLN(earlyRedemptionFee)}. Opłata nie może przekroczyć narosłych odsetek — nie zjada kapitału.`}
               />
             }
-            value={`${formatPLN(result.earlyRedemptionFee)}`}
+            value={`${formatPLN(earlyRedemptionFee)}`}
           />
         )}
         <DetailRow

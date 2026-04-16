@@ -1,23 +1,20 @@
 "use client";
 
-import { BondCalculation, Scenario } from "@/lib/bonds/types";
+import { Scenario, YearDataPoint } from "@/lib/bonds/types";
 import { formatPercent, formatPLN } from "@/lib/utils/format";
-import { TAX_RATE } from "@/lib/bonds/constants";
 
 interface AdvancedModeProps {
   scenario: Scenario;
   onInflationChange: (inflation: number[]) => void;
   onDepositRateChange: (rates: number[]) => void;
-  coi: BondCalculation;
-  edo: BondCalculation;
+  yearlyData: YearDataPoint[];
 }
 
 export default function AdvancedMode({
   scenario,
   onInflationChange,
   onDepositRateChange,
-  coi,
-  edo,
+  yearlyData,
 }: AdvancedModeProps) {
   function handleInflation(yearIndex: number, value: number) {
     const newInflation = [...scenario.inflation];
@@ -30,8 +27,6 @@ export default function AdvancedMode({
     newRates[yearIndex] = value;
     onDepositRateChange(newRates);
   }
-
-  const maxYears = Math.max(coi.yearlyResults.length, edo.yearlyResults.length);
 
   return (
     <div
@@ -121,37 +116,28 @@ export default function AdvancedMode({
             </tr>
           </thead>
           <tbody>
-            {Array.from({ length: maxYears }, (_, i) => {
-              const coiYear = coi.yearlyResults[i];
-              const edoYear = edo.yearlyResults[i];
-              const inflRate = scenario.inflation[i] ?? scenario.inflation[scenario.inflation.length - 1];
-
-              // EDO net at this year
-              const edoGross = edoYear?.capitalAtEnd ?? 0;
-              const edoGain = edoGross - edo.investedAmount;
-              const edoTax = edoGain > 0 ? edoGain * TAX_RATE : 0;
-              const edoNet = edoGross - edoTax;
-
+            {yearlyData.map((d) => {
+              const inflRate = scenario.inflation[d.year - 1] ?? scenario.inflation[scenario.inflation.length - 1];
               return (
-                <tr key={i} style={{ borderBottom: "1px solid var(--border)" }}>
-                  <td className="py-1.5 px-2" style={{ color: "var(--text-primary)" }}>{i + 1}</td>
+                <tr key={d.year} style={{ borderBottom: "1px solid var(--border)" }}>
+                  <td className="py-1.5 px-2" style={{ color: "var(--text-primary)" }}>{d.year}</td>
                   <td className="py-1.5 px-2 text-right" style={{ color: "var(--text-secondary)" }}>
                     {formatPercent(inflRate)}
                   </td>
                   <td className="py-1.5 px-2 text-right" style={{ color: "var(--coi-color)" }}>
-                    {coiYear ? formatPercent(coiYear.interestRate * 100) : "—"}
+                    {formatPercent(d.coiRate * 100)}
                   </td>
                   <td className="py-1.5 px-2 text-right" style={{ color: "var(--coi-color)" }}>
-                    {coiYear ? formatPLN(coiYear.capitalAtEnd) : "—"}
+                    {formatPLN(d.coiNet)}
                   </td>
                   <td className="py-1.5 px-2 text-right" style={{ color: "var(--edo-color)" }}>
-                    {edoYear ? formatPercent(edoYear.interestRate * 100) : "—"}
+                    {formatPercent(d.edoRate * 100)}
                   </td>
                   <td className="py-1.5 px-2 text-right" style={{ color: "var(--edo-color)" }}>
-                    {edoYear ? formatPLN(edoNet) : "—"}
+                    {formatPLN(d.edoNet)}
                   </td>
                   <td className="py-1.5 px-2 text-right" style={{ color: "var(--text-muted)" }}>
-                    {coiYear ? formatPercent((coiYear.cumulativeInflation - 1) * 100) : "—"}
+                    {formatPercent((d.cumulativeInflation - 1) * 100)}
                   </td>
                 </tr>
               );
