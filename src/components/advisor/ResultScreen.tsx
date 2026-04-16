@@ -490,6 +490,43 @@ function YearByYearTable({ yearlyData }: { yearlyData: YearDataPoint[] }) {
   );
 }
 
+function FaqItem({ question, children }: { question: string; children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div
+      className="rounded-xl overflow-hidden"
+      style={{ border: "1px solid var(--border)" }}
+    >
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left cursor-pointer"
+        style={{ backgroundColor: "var(--bg-section)" }}
+      >
+        <span className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+          {question}
+        </span>
+        <span
+          className="text-base shrink-0 transition-transform duration-200"
+          style={{
+            color: "var(--text-muted)",
+            transform: open ? "rotate(180deg)" : "rotate(0deg)",
+          }}
+        >
+          ▾
+        </span>
+      </button>
+      {open && (
+        <div
+          className="px-4 py-3 text-sm leading-relaxed"
+          style={{ backgroundColor: "var(--bg-card)", color: "var(--text-secondary)" }}
+        >
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function EducationBlocks({ horizonYears }: { horizonYears: number }) {
   const earlyExitNote =
     horizonYears <= 4
@@ -497,46 +534,22 @@ function EducationBlocks({ horizonYears }: { horizonYears: number }) {
       : "Jeśli potrzebujesz pieniędzy przed terminem, zapłacisz opłatę: COI — 0,70 zł, EDO — 2,00 zł za każdą obligację (nominał 100 zł). Opłata nigdy nie przekroczy narosłych odsetek.";
 
   return (
-    <div className="space-y-3 mb-6">
-      <div
-        className="p-4 rounded-xl"
-        style={{ backgroundColor: "var(--bg-section)", border: "1px solid var(--border)" }}
-      >
-        <p className="text-sm font-semibold mb-1" style={{ color: "var(--text-primary)" }}>
-          📘 Dlaczego COI i EDO dają różne wyniki?
-        </p>
-        <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-          COI wypłaca odsetki co rok na konto — możesz je reinwestować, ale Belka jest pobierana od razu.
-          EDO doliczaje odsetki do kapitału — w następnym roku odsetki naliczają się od większej kwoty
-          (procent składany), a Belka jest płacona dopiero przy wykupie. Przy długich horyzontach ta różnica
-          robi coraz większą różnicę.
-        </p>
-      </div>
-      <div
-        className="p-4 rounded-xl"
-        style={{ backgroundColor: "var(--bg-section)", border: "1px solid var(--border)" }}
-      >
-        <p className="text-sm font-semibold mb-1" style={{ color: "var(--text-primary)" }}>
-          📘 Co to jest indeksacja inflacją?
-        </p>
-        <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-          Od 2. roku oprocentowanie obu obligacji zależy od bieżącej inflacji: COI = inflacja + 1,5%,
-          EDO = inflacja + 2,0%. Gdy inflacja rośnie, rośnie też Twój kupon — obligacje indeksowane
-          chronią oszczędności przed utratą siły nabywczej. Dlatego wyniki zmieniają się wraz ze scenariuszem
-          inflacyjnym — sprawdź przełącznik powyżej.
-        </p>
-      </div>
-      <div
-        className="p-4 rounded-xl"
-        style={{ backgroundColor: "var(--bg-section)", border: "1px solid var(--border)" }}
-      >
-        <p className="text-sm font-semibold mb-1" style={{ color: "var(--text-primary)" }}>
-          📘 Co jeśli będę potrzebować pieniędzy wcześniej?
-        </p>
-        <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-          {earlyExitNote}
-        </p>
-      </div>
+    <div className="space-y-2 mb-6">
+      <FaqItem question="📘 Dlaczego COI i EDO dają różne wyniki?">
+        COI wypłaca odsetki co rok na konto — możesz je reinwestować, ale Belka jest pobierana od razu.
+        EDO dolicza odsetki do kapitału — w następnym roku odsetki naliczają się od większej kwoty
+        (procent składany), a Belka jest płacona dopiero przy wykupie. Przy długich horyzontach ta różnica
+        robi coraz większą różnicę.
+      </FaqItem>
+      <FaqItem question="📘 Co to jest indeksacja inflacją?">
+        Od 2. roku oprocentowanie obu obligacji zależy od bieżącej inflacji: COI = inflacja + 1,5%,
+        EDO = inflacja + 2,0%. Gdy inflacja rośnie, rośnie też Twój kupon — obligacje indeksowane
+        chronią oszczędności przed utratą siły nabywczej. Dlatego wyniki zmieniają się wraz ze scenariuszem
+        inflacyjnym — sprawdź przełącznik powyżej.
+      </FaqItem>
+      <FaqItem question="📘 Co jeśli będę potrzebować pieniędzy wcześniej?">
+        {earlyExitNote}
+      </FaqItem>
     </div>
   );
 }
