@@ -313,7 +313,7 @@ function GoalResultSection({
         </p>
       </div>
 
-      {/* Chart — base comparison data (all 12 years), slider moves only the reference line */}
+      {/* Chart + slider bezpośrednio pod nim */}
       <div className="mb-6">
         <h3
           className="text-base font-bold mb-4"
@@ -329,6 +329,38 @@ function GoalResultSection({
         <p className="text-sm mt-3 italic" style={{ color: "var(--text-secondary)" }}>
           EDO rośnie wolniej na początku, ale po 4–5 roku zaczyna przyspieszać — to efekt kapitalizacji odsetek. Czerwona przerywana linia = ile Twoje pieniądze muszą być warte, żeby nie stracić siły nabywczej.
         </p>
+
+        {/* Interactive slider — tuż pod wykresem */}
+        <div
+          className="mt-4 p-4 rounded-xl"
+          style={{ backgroundColor: "var(--bg-section)", border: "1px solid var(--border)" }}
+        >
+          <label className="block text-sm font-medium mb-2" style={{ color: "var(--text-primary)" }}>
+            Co jeśli wypłacę w innym momencie?
+          </label>
+          <div className="flex items-center gap-4">
+            <input
+              type="range"
+              min={1}
+              max={12}
+              step={1}
+              value={sliderHorizon}
+              onChange={(e) => setSliderHorizon(Number(e.target.value))}
+              className="flex-1 accent-slider"
+            />
+            <span
+              className="text-lg font-bold min-w-[60px] text-right"
+              style={{ color: "var(--accent)", fontFamily: "var(--font-mono)" }}
+            >
+              {formatYears(sliderHorizon)}
+            </span>
+          </div>
+          {sliderHorizon !== goal.horizonYears && (
+            <p className="text-xs mt-2" style={{ color: "var(--text-muted)" }}>
+              Przesunięto z {formatYears(goal.horizonYears)} na {formatYears(sliderHorizon)}. Karty i wyniki powyżej zostały przeliczone.
+            </p>
+          )}
+        </div>
       </div>
 
       {/* Education blocks */}
@@ -343,38 +375,6 @@ function GoalResultSection({
         winner={winner}
         horizonYears={sliderHorizon}
       />
-
-      {/* Interactive slider */}
-      <div
-        className="p-5 rounded-xl mb-6"
-        style={{ backgroundColor: "var(--bg-section)", border: "1px solid var(--border)" }}
-      >
-        <label className="block text-sm font-medium mb-2" style={{ color: "var(--text-primary)" }}>
-          Co jeśli wypłacę w innym momencie?
-        </label>
-        <div className="flex items-center gap-4">
-          <input
-            type="range"
-            min={1}
-            max={12}
-            step={1}
-            value={sliderHorizon}
-            onChange={(e) => setSliderHorizon(Number(e.target.value))}
-            className="flex-1 accent-slider"
-          />
-          <span
-            className="text-lg font-bold min-w-[60px] text-right"
-            style={{ color: "var(--accent)", fontFamily: "var(--font-mono)" }}
-          >
-            {formatYears(sliderHorizon)}
-          </span>
-        </div>
-        {sliderHorizon !== goal.horizonYears && (
-          <p className="text-xs mt-2" style={{ color: "var(--text-muted)" }}>
-            Przesunięto z {formatYears(goal.horizonYears)} na {formatYears(sliderHorizon)}. Wartości powyżej zostały przeliczone.
-          </p>
-        )}
-      </div>
 
       {/* Detailed table — hidden by default */}
       <button
