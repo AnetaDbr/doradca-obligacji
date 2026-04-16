@@ -66,7 +66,7 @@ export default function ComparisonChart({
   return (
     <div className="w-full" style={{ height: 350 }}>
       <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data} margin={{ top: 8, right: 12, left: 10, bottom: 5 }}>
+        <LineChart data={data} margin={{ top: 28, right: 12, left: 10, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
           <XAxis
             dataKey="year"
