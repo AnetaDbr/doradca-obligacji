@@ -282,7 +282,7 @@ function AmountInput({
           onChange={handleTextChange}
           onFocus={handleFocus}
           onBlur={handleBlur}
-          className="w-full pl-10 pr-4 py-3 rounded-xl text-2xl font-bold outline-none transition-colors text-right"
+          className="w-full pl-10 pr-4 py-3 rounded-xl text-2xl font-bold outline-none transition-colors text-left"
           style={{
             backgroundColor: "var(--bg-section)",
             border: error ? "1.5px solid var(--scenario-moderate)" : "1px solid var(--border)",

@@ -25,7 +25,7 @@ export default function ScenarioToggle({ value, onChange }: ScenarioToggleProps)
           <button
             key={key}
             onClick={() => onChange(key)}
-            className="px-3 py-1.5 rounded-lg text-sm font-medium transition-all cursor-pointer flex flex-col items-start"
+            className="px-3 py-1.5 rounded-lg text-sm font-medium transition-all cursor-pointer"
             style={{
               backgroundColor: isActive ? colors[key] : "var(--bg-card)",
               color: isActive ? "white" : "var(--text-secondary)",
@@ -33,15 +33,7 @@ export default function ScenarioToggle({ value, onChange }: ScenarioToggleProps)
             }}
             title={scenario.description}
           >
-            <span>{scenario.label} {scenario.name}</span>
-            {isActive && (
-              <span
-                className="text-xs font-normal mt-0.5 leading-tight"
-                style={{ opacity: 0.85, maxWidth: 160 }}
-              >
-                {scenario.description}
-              </span>
-            )}
+            {scenario.label} {scenario.name}
           </button>
         );
       })}

@@ -31,14 +31,13 @@ export default function ResultScreen({
   const [methodologyOpen, setMethodologyOpen] = useState(false);
 
   const activeScenario = useMemo(() => {
-    if (customInflation && customDepositRate) {
-      return {
-        ...SCENARIOS[scenario],
-        inflation: customInflation,
-        depositRate: customDepositRate,
-      };
-    }
-    return SCENARIOS[scenario];
+    const base = SCENARIOS[scenario];
+    if (!customInflation && !customDepositRate) return base;
+    return {
+      ...base,
+      inflation: customInflation ?? base.inflation,
+      depositRate: customDepositRate ?? base.depositRate,
+    };
   }, [scenario, customInflation, customDepositRate]);
 
   const results = useMemo(
