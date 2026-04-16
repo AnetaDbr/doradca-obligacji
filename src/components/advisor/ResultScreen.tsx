@@ -282,7 +282,7 @@ function GoalResultSection({
         <BondCard
           type="COI"
           horizonYears={sliderHorizon}
-          isBetter={winner === "COI"}
+          isBetter={bestLabel === "COI" ? (winner === "CLOSE" ? "close" : "better") : false}
           finalValueNet={sliderComparison.coiAtHorizon}
           totalReturn={sliderComparison.coiReturn}
           totalReturnPercent={sliderComparison.coiReturnPct}
@@ -293,7 +293,7 @@ function GoalResultSection({
         <BondCard
           type="EDO"
           horizonYears={sliderHorizon}
-          isBetter={winner === "EDO"}
+          isBetter={bestLabel === "EDO" ? (winner === "CLOSE" ? "close" : "better") : false}
           finalValueNet={sliderComparison.edoAtHorizon}
           totalReturn={sliderComparison.edoReturn}
           totalReturnPercent={sliderComparison.edoReturnPct}

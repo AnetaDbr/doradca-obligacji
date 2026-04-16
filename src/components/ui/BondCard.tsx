@@ -9,7 +9,7 @@ import InfoTooltip from "./Tooltip";
 interface BondCardProps {
   type: BondType;
   horizonYears: number;
-  isBetter: boolean;
+  isBetter: "better" | "close" | false;
   finalValueNet: number;
   totalReturn: number;
   totalReturnPercent: number;
@@ -54,12 +54,20 @@ export default function BondCard({
       }}
     >
       {/* Better label */}
-      {isBetter && (
+      {isBetter === "better" && (
         <div
           className="text-xs font-semibold px-3 py-1 rounded-full mb-2 inline-block"
           style={{ backgroundColor: `var(${colorVar})`, color: "white" }}
         >
           ✓ Korzystniejsze przy Twoim horyzoncie
+        </div>
+      )}
+      {isBetter === "close" && (
+        <div
+          className="text-xs font-semibold px-3 py-1 rounded-full mb-2 inline-block"
+          style={{ backgroundColor: `var(${colorVar})`, color: "white" }}
+        >
+          ✓ Nieznacznie korzystniejsze
         </div>
       )}
 
