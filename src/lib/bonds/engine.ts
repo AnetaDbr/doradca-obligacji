@@ -34,7 +34,7 @@ function buildCOITimeline(
   const rates: number[] = [];
   const fees: number[] = [];
 
-  let numberOfBonds = investedAmount / params.purchasePrice;
+  let numberOfBonds = Math.round(investedAmount / params.nominalValue);
   let reinvestedPool = 0; // net interest accumulated on deposit (after Belka each year)
   let cycleStartYear = 1;
 
@@ -66,7 +66,7 @@ function buildCOITimeline(
       fees.push(0);
       values.push(grossValue);
 
-      numberOfBonds = grossValue / params.swapPrice; // swap into next emission
+      numberOfBonds = Math.floor(grossValue / params.nominalValue); // swap into next emission (whole bonds only)
       reinvestedPool = 0;
       cycleStartYear = year + 1;
     } else {
@@ -104,7 +104,7 @@ function buildEDOTimeline(
   const rates: number[] = [];
   const fees: number[] = [];
 
-  const numberOfBonds = investedAmount / params.purchasePrice;
+  const numberOfBonds = Math.round(investedAmount / params.nominalValue);
   let capitalPerBond = params.nominalValue; // grows through capitalisation
   let postMaturityCapital = 0;
   let matured = false;
